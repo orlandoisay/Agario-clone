@@ -1,0 +1,16 @@
+{
+  "name": "agario",
+  "version": "1.0.0",
+  "description": "testing node.js to make an agario-ish clone",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "run": "node index.js"
+  },
+  "author": "me@orlandoisay.com",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.0",
+    "socket.io": "^2.2.0"
+  }
+}

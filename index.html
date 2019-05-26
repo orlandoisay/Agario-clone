@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Agario</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 50px;
+                text-align: center;
+            }
+
+            canvas {
+                margin: 0px;
+                box-shadow: 2px 3px 5px 3px #c0c0c08e;
+            }
+        </style>
+        <script src="/socket.io/socket.io.js"></script>
+    </head>
+    <body>
+        <canvas id="cnv" width="700" height="500"></canvas>
+        <!-- Canvas class -->
+        <script>
+            class Cnv {
+                constructor(cnv) {
+                    this.cnv = document.getElementById(cnv);
+                    this.ctx = this.cnv.getContext('2d');
+                    this.width = this.cnv.width;
+                    this.height = this.cnv.height;
+                }
+
+                fullscreen() {
+                    this.cnv.style.position = "absolute";
+                    this.cnv.style.top = "0px";
+                    this.cnv.style.left = "0px";
+                    this.cnv.width = window.innerWidth;
+                    this.cnv.height = window.innerHeight;
+                    this.width = this.cnv.width;
+                    this.height = this.cnv.height;
+                }
+
+                clear() {
+                    let mx = 5000;
+                    this.ctx.clearRect(-mx, -mx, 2 * mx, 2 * mx);
+                }
+
+                showGrid() {
+                    this.ctx.beginPath();
+
+                    this.ctx.strokeStyle = "#000";
+                    this.ctx.lineWidth = 1;
+                    
+                    this.ctx.moveTo(-1000, 0);
+                    this.ctx.lineTo( 1000, 0);
+                    this.ctx.moveTo(0, -1000);
+                    this.ctx.lineTo(0,  1000);                    
+
+                    this.ctx.stroke();
+
+                    this.ctx.closePath();
+                }
+
+                draw(e) {
+                    e.draw(this.ctx);
+                }
+            }
+        </script>
+        <!-- LocalPlyr class -->
+        <script>
+            class LocalPlyr {
+                constructor(data) {
+                    this.alpha = 0.5;
+
+                    this.oldX = data.x;
+                    this.newX = data.x;
+                    this.oldY = data.y;
+                    this.newY = data.y;
+                    this.oldR = data.r;
+                    this.newR = data.r;
+                    this.oldD = data.d;
+                    this.newD = data.d;
+                    this.oldS = data.s;
+                    this.newS = data.s;
+
+                    this.color = data.color;
+                }
+
+                updateData(data) {
+                    this.newX = data.x;
+                    this.newY = data.y;
+                    this.newR = data.r;
+                    this.newD = data.d;
+                    this.newS = data.s;
+                }
+
+                update() {
+                    this.newX += this.newS * this.oldD.x;
+                    this.newY += this.newS * this.oldD.y;
+
+                    this.oldX += (this.newX - this.oldX) * this.alpha;
+                    this.oldY += (this.newY - this.oldY) * this.alpha;
+                    this.oldR += (this.newR - this.oldR) * this.alpha;
+                    this.oldD = this.newD;
+                }
+
+                draw(ctx) {
+                    ctx.beginPath();
+
+                    ctx.fillStyle = this.color;
+                    ctx.ellipse(this.oldX, this.oldY, this.oldR, this.oldR, 0, 2 * Math.PI, 0);
+                    ctx.fill();
+
+                    ctx.closePath();
+                }
+            }
+        </script>
+        <!-- LocalFood class -->
+        <script>
+            class LocalFood {
+                constructor(data) {
+                    this.x = data.x;
+                    this.y = data.y;
+                    this.v = data.v;
+                    this.r = data.r;
+
+                    this.s = 0.3 * Math.random();
+                }
+
+                draw(ctx) {
+                    let ttt = (new Date()).getTime() % 10000;
+                    let rad = this.r + 3 * Math.sin((this.s +  (ttt / 10000) * 2 * Math.PI) * 2);
+
+                    ctx.beginPath();
+                    
+                    ctx.fillStyle = "#01de20d0";
+                    ctx.ellipse(this.x, this.y, rad, rad, 0, 2 * Math.PI, 0);
+                    ctx.fill();
+
+                    ctx.closePath();
+                }
+            }
+        </script>
+        <script>
+            let socket = io();
+            let canvas = new Cnv('cnv');    
+            
+            canvas.fullscreen();
+
+            let dx = canvas.width / 2;
+            let dy = canvas.height / 2;
+
+            let tx = 0;
+            let ty = 0;
+            let sc = 1;
+
+            let plyr = null;
+            
+            let otherPlayers = new Map();
+            let food = []
+
+            socket.on('broadcast', data => {                
+                let p = new Map(data.p);
+
+                console.log(p.size);
+
+                food = [];
+                for (let i = 0; i < data.f.length; i++) 
+                    food.push(new LocalFood(data.f[i]));
+                
+
+                p.forEach((v, k) => {
+                    if (k != socket.id) {
+                        if (otherPlayers.has(k)) {
+                            let othr = otherPlayers.get(k);
+                            othr.updateData(v);
+                        } else {
+                            otherPlayers.set(k, new LocalPlyr({
+                                x: v.x, y: v.y, r: v.r, d: v.d, s: v.s, color: '#ff0000'
+                            }));
+                        }
+                    }
+                });
+
+                gonePlayers = [];
+
+                otherPlayers.forEach((v, k) => {
+                    if (!p.has(k))
+                        gonePlayers.push(k);
+                });
+
+                for (let i = 0; i < gonePlayers.length; i++)
+                    otherPlayers.delete(gonePlayers[i]);
+
+                let me = p.get(socket.id);
+                
+                if (plyr == null) {
+                    plyr = new LocalPlyr({
+                        x: me.x, y: me.y / 2, r: me.r, d: me.d, s: me.s, color: '#0000ff'
+                    });
+                } else {
+                    plyr.updateData(me);
+                }
+                
+            });
+
+            setInterval(() => {
+                socket.emit('update', {
+                    x: dx,
+                    y: dy
+                });
+                
+            }, 20);
+
+            setInterval(() => {
+                
+                if (plyr != null) {
+                    tx = plyr.oldX;// - canvas.width / 2 + plyr.oldR / 2; 
+                    ty = plyr.oldY;// - canvas.height / 2 + plyr.oldR / 2;
+                    sc = 25 / (plyr.oldR);
+                }
+                
+                canvas.ctx.translate(canvas.width / 2, canvas.height / 2);
+                canvas.ctx.scale(sc, sc);
+                canvas.ctx.translate(-tx, -ty);                
+
+                canvas.clear();
+                canvas.showGrid();
+
+                for (let i = 0; i < food.length; i++)
+                    canvas.draw(food[i]);
+
+                otherPlayers.forEach(p => {
+                    p.update();
+                    canvas.draw(p);
+                });
+
+                if (plyr != null) {
+                    plyr.update();
+                    canvas.draw(plyr);
+
+                    canvas.ctx.font = "30px Arial";
+                    canvas.ctx.fillText(`x: ${plyr.oldX}, y: ${plyr.oldY}`, plyr.oldX, plyr.oldY);
+                }                
+            
+                canvas.ctx.translate(tx, ty);
+                canvas.ctx.scale(1 / sc, 1 / sc);
+                canvas.ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+            }, 20);
+
+            canvas.cnv.addEventListener('mousemove', data => {
+                dx = data.clientX - (canvas.cnv.offsetLeft + canvas.cnv.width / 2);
+                dy = data.clientY - (canvas.cnv.offsetTop + canvas.cnv.height / 2);
+            });
+
+        </script>
+    </body>
+</html>
